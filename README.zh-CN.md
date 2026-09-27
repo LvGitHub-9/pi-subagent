@@ -11,7 +11,13 @@
 
 ## 安装
 
-作为本地 Pi 包安装（推荐，走 git 管理）：
+从 GitHub 安装（锁定到某个 release）：
+
+```bash
+pi install git:github.com/LvGitHub-9/pi-subagent@v0.1.0
+```
+
+从本地克隆安装（开发时方便）：
 
 ```bash
 pi install ./pi-subagent

@@ -11,7 +11,13 @@ Built on Pi's official `examples/extensions/subagent`; every deliberate change i
 
 ## Install
 
-As a local Pi package (recommended — keeps it under version control):
+From GitHub, pinned to a release:
+
+```bash
+pi install git:github.com/LvGitHub-9/pi-subagent@v0.1.0
+```
+
+From a local checkout (handy while developing):
 
 ```bash
 pi install ./pi-subagent
