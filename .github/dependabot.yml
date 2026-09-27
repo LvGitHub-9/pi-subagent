@@ -1,0 +1,10 @@
+version: 2
+updates:
+  # Keep the workflow actions current; there are no runtime dependencies to watch
+  # (Pi's packages are peer dependencies supplied by the host).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(ci)"
