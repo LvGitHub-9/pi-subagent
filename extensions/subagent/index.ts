@@ -513,8 +513,8 @@ export default function (pi: ExtensionAPI) {
 				thinkingLevel: ctx.thinkingLevel,
 			};
 			// `cwd` selects the project for this call, so agent discovery follows it instead
-			// of the session directory: a session started at the parent directory must be able to delegate
-			// into a subproject and use that subproject's .pi/agents.
+			// of the session directory: a session started in a parent directory must be able
+			// to delegate into a subproject and use that subproject's .pi/agents.
 			const discovery = discoverAgents(params.cwd ?? ctx.cwd, agentScope);
 			const agents = discovery.agents;
 			// The trust gate belongs to the user, not the model: a tool parameter would

@@ -12,11 +12,21 @@
   ],
   "license": "MIT",
   "author": "Lv",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LvGitHub-9/pi-subagent.git"
+  },
+  "homepage": "https://github.com/LvGitHub-9/pi-subagent#readme",
+  "bugs": {
+    "url": "https://github.com/LvGitHub-9/pi-subagent/issues"
+  },
   "files": [
     "extensions",
     "agents",
     "prompts",
-    "README.md"
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
   ],
   "pi": {
     "extensions": [

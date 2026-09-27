@@ -1,42 +1,44 @@
 # pi-subagent
 
-把任务委派给**独立上下文窗口**的子代理。主会话只拿到压缩后的结论，不被探索过程撑爆。
+**Delegate tasks to subagents with isolated context windows from inside [Pi](https://pi.dev).** The main session only gets the compressed result instead of the exploration noise.
 
-基于 Pi 官方 `examples/extensions/subagent` 改造，主要改动见文末「与官方示例的差异」。
+**English** | [中文](README.zh-CN.md)
 
-## 安装
+Built on Pi's official `examples/extensions/subagent`; every deliberate change is listed in [Differences from the official example](#differences-from-the-official-example).
 
-作为本地 Pi 包安装（推荐，走 git 管理）：
+## Install
+
+As a local Pi package (recommended — keeps it under version control):
 
 ```bash
 pi install ./pi-subagent
 ```
 
-或写进 `~/.pi/agent/settings.json`：
+Or add it to `~/.pi/agent/settings.json`:
 
 ```json
 { "packages": ["/absolute/path/to/pi-subagent"] }
 ```
 
-临时试用某一次启动：
+To try it for a single run:
 
 ```bash
 pi -e ./pi-subagent
 ```
 
-装上以后主模型会多出一个 `subagent` 工具。
+Once installed the main model gains a `subagent` tool.
 
-## 三种模式
+## Modes
 
-| 模式 | 参数 | 说明 |
+| Mode | Parameters | Notes |
 |---|---|---|
-| 单发 | `{ agent, task }` | 一个代理干一件事 |
-| 并行 | `{ tasks: [...] }` | 最多 8 个任务，最多 4 个并发 |
-| 串联 | `{ chain: [...] }` | 顺序执行，后续步骤用 `{previous}` 引用上一步输出 |
+| Single | `{ agent, task }` | One agent, one job |
+| Parallel | `{ tasks: [...] }` | Up to 8 tasks, at most 4 concurrent |
+| Chain | `{ chain: [...] }` | Sequential; later steps reference the previous output with `{previous}` |
 
-不带任何模式参数调用时，工具会返回当前可用的 agent 清单（方便模型自己发现）。
+Called with no mode parameters the tool returns the list of available agents, so the model can discover them itself.
 
-例子：
+Examples:
 
 ```
 Use scout to find all authentication code
@@ -44,126 +46,130 @@ Run 2 scouts in parallel: one to find models, one to find providers
 Chain: scout finds the read tool, planner suggests improvements
 ```
 
-## 内置 agent
+## Builtin agents
 
-| Agent | 用途 | 工具 |
+| Agent | Purpose | Tools |
 |---|---|---|
-| `scout` | 快速侦察代码库，返回压缩后的结构化上下文 | read, grep, find, ls, bash |
-| `planner` | 只读分析，产出可执行计划 | read, grep, find, ls |
-| `reviewer` | 代码审查（质量 / 安全），只读 bash（提示词约束，非硬性） | read, grep, find, ls, bash |
-| `worker` | 通用执行者，能力不受限 | 全部 |
+| `scout` | Fast codebase recon, returns compressed structured context | read, grep, find, ls, bash |
+| `planner` | Read-only analysis, produces an actionable plan | read, grep, find, ls |
+| `reviewer` | Code review (quality / security), read-only bash (prompt-enforced, not enforced by tooling) | read, grep, find, ls, bash |
+| `worker` | General-purpose executor, unrestricted | all |
 
-内置 agent 不写死模型，默认**继承派发会话的模型与思考等级**。
+Builtin agents do not pin a model: they **inherit the dispatching session's model and thinking level**.
 
-## 自定义 agent
+## Custom agents
 
-在 `agents/` 下放 markdown 文件，YAML frontmatter 定义元数据：
+Drop a markdown file into `agents/`; YAML frontmatter carries the metadata:
 
 ```markdown
 ---
 name: my-agent
-description: 这个 agent 干什么
+description: What this agent does
 tools: read, grep, find
-model: deepseek/deepseek-flash   # 省略则继承父会话
+model: deepseek/deepseek-flash   # omit to inherit the parent session
 ---
 
-这里是系统提示词。
+The system prompt goes here.
 ```
 
-三层目录，后者覆盖前者（同名以高优先级为准）：
+Three tiers, later wins (same name = higher tier takes precedence):
 
-| 层级 | 位置 | 何时加载 |
+| Tier | Location | Loaded when |
 |---|---|---|
-| builtin | `<本包>/agents/*.md` | 始终 |
-| user | `~/.pi/agent/agents/*.md` | `agentScope: "user"`（默认）或 `"both"` |
-| project | `<cwd>` 或其**任意祖先目录**的 `.pi/agents/*.md`；调用时传 `cwd` 可指定目标项目 | 仅 `agentScope: "project"` 或 `"both"` |
+| builtin | `<this package>/agents/*.md` | always |
+| user | `~/.pi/agent/agents/*.md` | `agentScope: "user"` (default) or `"both"` |
+| project | `.pi/agents/*.md` in `<cwd>` or **any ancestor**; pass `cwd` to pick the target project | only with `agentScope: "project"` or `"both"` |
 
-`PI_SUBAGENT_AGENTS_DIR` 可覆盖 builtin 目录（测试或特殊布局用）。
+`PI_SUBAGENT_AGENTS_DIR` overrides the builtin directory (for tests or unusual layouts).
 
-## 安全模型
+## Security model
 
-每个子代理都是一个独立的 `pi` 子进程，带独立的系统提示词与工具/模型配置。
+Every subagent is a separate `pi` process with its own system prompt and tool/model configuration.
 
-- **项目级 agent（`.pi/agents/`）由仓库控制**，默认不加载；要启用必须显式传 `agentScope: "both"`（或 `"project"`）。
-- 只要**实际请求**了项目级 agent，交互模式就一律先弹确认框。**pi 自身的项目信任在这里不起作用**：`.pi/agents/` 不属于 pi 的受保护资源（settings/extensions/skills/themes 才是），所以只含 `.pi/agents` 的项目会被 pi 判为「已信任」，`ctx.isProjectTrusted()` 恒为真——依赖它会让这道门形同虚设。因此改为「请求即确认」。
-- **无 UI 时一律拒绝**（`pi -p` / `--mode json` 这类无头场景），而不是默默放行：没人能同意就不跑。报错会提示换交互模式或改用 `agentScope: "user"`。
-- 用户可以一次性豁免这道门：`PI_SUBAGENT_CONFIRM_PROJECT_AGENTS=0`，必须是 **Pi 启动时的进程环境**。这个开关**只属于用户**——它不在工具参数里，所以模型无法自己关掉。
-- `/subagent-agents` 只在项目被信任时才列举项目级 agent。
+- **Project agents (`.pi/agents/`) are repository-controlled** and are not loaded by default; enabling them requires an explicit `agentScope: "both"` (or `"project"`).
+- Whenever a project agent is **actually requested**, interactive mode always asks first. **Pi's own project trust is useless here**: `.pi/agents/` is not one of Pi's protected resources (settings/extensions/skills/themes are), so a project holding only `.pi/agents` is reported as *trusted* and `ctx.isProjectTrusted()` is always true — relying on it makes the gate decorative. Hence: request means prompt.
+- **With no UI, the request is refused** (`pi -p` / `--mode json` and other headless cases) instead of silently proceeding: if nobody can consent, it does not run. The error suggests running interactively or using `agentScope: "user"`.
+- A user can waive the prompt with `PI_SUBAGENT_CONFIRM_PROJECT_AGENTS=0`, which must be **in the environment Pi starts from**. That switch **belongs to the user** — it is not a tool parameter, so the model cannot turn it off.
+- `/subagent-agents` only lists project agents when the project is trusted.
 
-## 工作流 prompt 模板
+## Workflow prompt templates
 
 ```
-/implement <需求>               scout → planner → worker
-/scout-and-plan <需求>          scout → planner（不实现）
-/implement-and-review <需求>    worker → reviewer → worker
+/implement <request>              scout → planner → worker
+/scout-and-plan <request>         scout → planner (no implementation)
+/implement-and-review <request>   worker → reviewer → worker
 ```
 
-## 界面
+## Interface
 
-- 折叠视图：状态图标、agent 名、用量统计；单发模式显示最近 10 条工具调用/文本，串联与并行模式每个步骤显示最近 5 条。
-- `Ctrl+O` 展开：完整任务、全部工具调用、Markdown 渲染的最终输出、每步骤用量。
-- 并行模式实时显示 `2/3 done, 1 running`；Ctrl+C 会传递到子进程。
+- Collapsed view: status icon, agent name, usage stats; single mode shows the last 10 tool calls/text items, chain and parallel show the last 5 per step.
+- `Ctrl+O` expands: full task, every tool call, the final output rendered as Markdown, and per-step usage.
+- Parallel mode shows live progress such as `2/3 done, 1 running`; Ctrl+C propagates to the child processes.
 
-## 测试
+## Testing
 
 ```bash
-npm test        # 4 个套件，全部离线：零模型调用、零终端、不碰真实的 ~/.pi/agent
+npm test        # 4 suites, fully offline: no model calls, no terminal, never touches your real ~/.pi/agent
 ```
 
-| 套件 | 覆盖 |
+| Suite | Coverage |
 |---|---|
-| `test/discovery.test.cjs` | 三层优先级、scope 隔离、`PI_SUBAGENT_AGENTS_DIR` 覆盖、坏 agent 文件容错 |
-| `test/render.test.cjs` | `renderCall` / `renderResult`：三种模式 × 折叠/展开 × 成功/失败/运行中，76 项断言，含窄宽度与可视宽度不溢出 |
-| `test/tool.test.cjs` | 整条执行链路 86 项：spawn、JSONL 解析、用量汇总、`{previous}` 替换、50 KB 截断、信任门控、中止、临时文件清理 |
-| `test/extension.test.cjs` | 注册面：工具与参数 schema、prompt 集成、`/subagent-agents` 的信任行为、不在工厂里订阅事件 |
+| `test/discovery.test.cjs` | three-tier precedence, scope isolation, the `PI_SUBAGENT_AGENTS_DIR` override, tolerance of malformed agent files |
+| `test/render.test.cjs` | `renderCall` / `renderResult` across every mode × collapsed/expanded × success/failure/running (76 checks), including narrow widths and visible-width overflow |
+| `test/tool.test.cjs` | the whole execution pipeline (93 checks): spawn, JSONL parsing, usage aggregation, `{previous}` substitution, the 50 KB cap, the trust gate, aborts, temp-file cleanup |
+| `test/extension.test.cjs` | the registration surface: tool and parameter schema, prompt integration, `/subagent-agents` trust behaviour, no event subscriptions in the factory |
 
-两个关键点让离线测试成为可能：
+Two things make offline testing possible:
 
-1. **渲染无需终端**：`renderCall` / `renderResult` 返回的是 pi-tui 组件，唯一要求是 `render(width): string[]`。
-2. **无需模型调用**：子代理是按 `node <process.argv[1]>` 启动的，测试把 `process.argv[1]` 指向 `test/fake-pi.cjs`；它按 `--mode json` 格式回放消息，并把收到的每个参数写进报告文件供断言。
+1. **Rendering needs no terminal**: `renderCall` / `renderResult` return pi-tui components whose only requirement is `render(width): string[]`.
+2. **No model calls**: the child is started as `node <process.argv[1]>`, so the tests point `process.argv[1]` at `test/fake-pi.cjs`, which replays messages in the `--mode json` shape and records every argument it received for assertions.
 
-`test/_harness.cjs` 负责定位 Pi 安装位置并用 jiti 加载真实扩展。alias 指向包的 **dist 目录**而非入口文件——指向文件会被 jiti 做前缀替换，从而破坏 `@earendil-works/pi-ai/compat` 这类子路径导入。
+`test/_harness.cjs` locates the Pi installation and loads the real extension through jiti. The aliases point at package **dist directories** rather than entry files — a file alias is prefix-substituted by jiti and breaks subpath imports such as `@earendil-works/pi-ai/compat`.
 
-### 手工验收确认框（需要真实 TUI）
+### Manual check of the confirmation dialog (needs a real TUI)
 
-测试套件用的是伪造的 `ctx`，真弹窗只能人看。仓库自带 `.pi/agents/demo.md` 作为固定夹具：
+The suite uses a fake `ctx`, so the actual dialog can only be eyeballed. The repository ships `.pi/agents/demo.md` as a fixed fixture:
 
-1. 在 `./pi-subagent` 目录开一个新会话（或在任意位置传 `cwd` 指向它）；
-2. 让它用 `agentScope: "both"` + `agent: "demo"` 调用 subagent；
-3. 应当弹确认框；选「否」应返回 `Canceled: project-local agents not approved.`。
+1. Open a new session in the repository directory (or pass `cwd` pointing at it from anywhere);
+2. Ask it to call subagent with `agentScope: "both"` and `agent: "demo"`;
+3. A confirmation dialog should appear; answering no should return `Canceled: project-local agents not approved.`.
 
-注意：项目 agent 目录是从**会话 cwd 向上**查找的，所以会话开在父目录时得靠 `cwd` 参数指定目标项目，否则会报 `Unknown agent`。
+Note: the project agent directory is found by walking **up** from the session cwd, so when the session runs in a parent directory you must pass `cwd` to name the target project, otherwise you get `Unknown agent`.
 
-## 与官方示例的差异
+## Differences from the official example
 
-1. **内置 agents 目录**：官方示例只找 user / project 两个目录，agent 定义必须手工拷到 `~/.pi/agent/agents`。这里增加了 `builtin` 层，包自带 4 个 agent，开箱即用，同时仍可被 user / project 覆盖。
-2. **agent 模型改为继承**：官方示例写死 `claude-*`；这里默认继承派发会话的模型。
-3. **发现能力**：新增「无参数即列出 agent 清单」与 `/subagent-agents` 命令。
-4. **系统提示集成**：补上 `promptSnippet` 与 `promptGuidelines`，让工具出现在默认系统提示的可用工具列表里，并给出使用时机建议。
-5. **测试**：新增 `test/discovery.test.cjs` 回归测试。
-6. **无效参数改为抛错**：官方示例的这个分支只返回一段普通文本（没带 `isError`），而模型会把「参数写错了」当成一次成功调用。这里改成 `throw`。
-7. **修中止升级**：官方示例用 `if (!proc.killed)` 判断是否补发 SIGKILL，但 `proc.killed` 在 SIGTERM 发出后即为 `true`，所以 SIGKILL 永远不会发出。改为按 `exitCode` / `signalCode` 判断子进程是否真的还在跑，并 `unref()` 定时器、在 close 时清理。
-8. **信任门控重做**：官方示例的门控条件有两个漏洞——(a) 它用 `!ctx.isProjectTrusted()`，但 `.pi/agents/` 不属于 pi 的受保护资源，只含 agent 的项目会被判为已信任，所以这道门在真实场景里几乎不会触发；(b) `confirmProjectAgents` 是工具参数，实测模型会主动把它设成 `false` 从而静默绕过确认框。这里改为「请求项目级 agent 即确认、无 UI 即拒绝、豁免开关只放在用户环境变量里」。
-9. **`/subagent-agents` 尊重项目信任**：官方没有这个命令；新增时默认只在信任的项目里列举项目级 agent。
-10. **离线测试套件**：官方示例只有手工验证。这里用「假 pi 子进程 + 无终端渲染」做到零模型调用、零终端的完整覆盖。
-11. **`cwd` 参与 agent 发现**：官方示例只用会话 cwd 找 `.pi/agents`，所以在父目录开会话、委派到子项目时会找不到该子项目的 agent（实测模型只能把 agent 文件复制到父目录来绕过，把仓库搞脏）。这里让 `cwd` 同时决定发现目录与子进程工作目录。
+1. **Builtin agents directory**: the official example only looks at user / project, so agent definitions have to be copied into `~/.pi/agent/agents` by hand. A `builtin` tier is added, the package ships 4 agents that work out of the box, and user / project agents can still override them.
+2. **Agents inherit the model**: the official example pins `claude-*`; here they inherit the dispatching session's model by default.
+3. **Discoverability**: calling with no arguments lists the agents, plus a `/subagent-agents` command.
+4. **System-prompt integration**: `promptSnippet` and `promptGuidelines` are added, so the tool shows up in the default system prompt's tool list with guidance on when to use it.
+5. **Tests**: a regression suite instead of manual checking.
+6. **Invalid parameters throw**: the official branch merely returns ordinary text, so the model treats "you got the arguments wrong" as a successful call. This throws instead.
+7. **Abort escalation fixed**: the official code uses `if (!proc.killed)` to decide whether to escalate to SIGKILL, but `proc.killed` is already true once SIGTERM has been delivered, so SIGKILL was never sent. It now tests `exitCode` / `signalCode`, `unref()`s the timer and clears it on close.
+8. **Trust gate rebuilt**: the official conditions have two holes — (a) it uses `!ctx.isProjectTrusted()`, but `.pi/agents/` is not a Pi-protected resource, so a project holding only agents counts as trusted and the gate effectively never fires; (b) `confirmProjectAgents` is a tool parameter, and in a real session the model set it to `false` and bypassed the prompt silently. Now: requesting a project agent always prompts, no UI means refusal, and the waiver lives only in a user environment variable.
+9. **`/subagent-agents` respects project trust**: the command does not exist upstream; as added, it only lists project agents for a trusted project.
+10. **Offline test suite**: the official example is verified by hand; this one is covered by a fake child process plus headless rendering, with no model calls and no terminal.
+11. **`cwd` participates in agent discovery**: the official example only searches from the session cwd, so delegating from a parent directory into a subproject cannot find that subproject's agents (in a real session the model worked around it by copying the agent file into the parent, dirtying the repo). Here `cwd` selects the discovery directory as well as the child's working directory.
 
-## 错误处理与取舍
+## Error handling and trade-offs
 
-Pi 只在 `execute()` **抛错**时才把工具结果标记为失败：返回对象上的 `isError: true` 会被忽略（实测事件流与模型看到的 `toolResult.isError` 都是 `false`，官方示例的失败分支也是这样被忽略的）。
+Pi only marks a tool result as failed when `execute()` **throws**: an `isError: true` on the returned object is ignored (verified — both the event stream and the model-facing `toolResult.isError` were `false`; the official example's failure branches are ignored the same way).
 
-- **参数组合错误**（同时给了多个模式）：抛错，模型能明确看到失败并自我纠正。此时没有已完成的工作需要展示。
-- **其余失败**：返回自描述文本，**故意不抛错**——抛错会丢掉 `details`，而失败时用户往往最想看子代理挂掉前调了哪些工具。各模式的前缀：
-  - 单发：`Agent <stopReason>: <输出>`（通常是 `Agent error:` / `Agent aborted:`，进程非 0 退出时为 `Agent failed:`）
-  - 串联：`Chain stopped at step N (<agent>): <输出>`
-  - 并行：`Parallel: N/M succeeded`，每个失败任务带 `### [<agent>] failed`
-  - 超过 8 个并行任务：`Too many parallel tasks (...)`
-  - 项目级 agent 未获批准：`Canceled: project-local agents not approved.`，无 UI 时 `Refused to run project-local agents: no UI is available to confirm them.`
-- **中止**：Ctrl+C 后先 SIGTERM，5 秒内未退出再 SIGKILL，然后抛 `Subagent was aborted`。注意 Windows 上 `process.kill` 的 SIGTERM 会直接终止进程（不可捕获），升级分支实际只在 POSIX 生效；POSIX 下有测试覆盖，Windows 下只验证「不挂起、确实已终止」。
+- **Conflicting mode parameters**: throws, so the model clearly sees the failure and corrects itself. There is no completed work to display.
+- **Every other failure** returns self-describing text and **deliberately does not throw** — throwing would discard `details`, and on failure the user most wants to see which tools the subagent called before dying. Prefixes per mode:
+  - single: `Agent <stopReason>: <output>` (usually `Agent error:` / `Agent aborted:`, or `Agent failed:` when the process exits non-zero)
+  - chain: `Chain stopped at step N (<agent>): <output>`
+  - parallel: `Parallel: N/M succeeded`, with `### [<agent>] failed` per failed task
+  - more than 8 parallel tasks: `Too many parallel tasks (...)`
+  - project agent not approved: `Canceled: project-local agents not approved.`, or `Refused to run project-local agents: no UI is available to confirm them.` without a UI
+- **Abort**: Ctrl+C sends SIGTERM, escalates to SIGKILL if the child is still running after 5 seconds, then throws `Subagent was aborted`. Note that on Windows `process.kill`'s SIGTERM terminates the process outright (it cannot be caught), so the escalation only matters on POSIX; the escalation branch is covered by tests on POSIX, while on Windows the tests only assert that the call settles and the child is really gone.
 
-## 已知限制
+## Known limitations
 
-- 折叠视图：单发模式显示最近 10 条，串联 / 并行模式每个步骤显示最近 5 条。
-- 并行模式给模型看的输出每个任务上限 50 KB（完整结果仍在 tool details 里）。
-- `reviewer` 的只读是提示词层面的约束，`--tools` 管不住 bash 的读写；硬性限制需要额外的权限门控扩展。
-- 每次调用都会重新扫描 agent 目录，所以会话中途改 agent 文件立即生效。
+- Collapsed view: the last 10 items in single mode, the last 5 per step in chain and parallel.
+- In parallel mode the model-facing output is capped at 50 KB per task (the full result stays in the tool details).
+- `reviewer`'s read-only nature is a prompt-level constraint; `--tools` cannot stop bash from writing. A hard guarantee needs an extra permission-gating extension.
+- Agent directories are rescanned on every call, so editing an agent file takes effect mid-session.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
