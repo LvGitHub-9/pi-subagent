@@ -408,15 +408,21 @@ async function runSingleAgent(
 			});
 
 			if (signal) {
+				let killTimer: ReturnType<typeof setTimeout> | undefined;
 				const killProc = () => {
 					wasAborted = true;
 					proc.kill("SIGTERM");
-					setTimeout(() => {
-						if (!proc.killed) proc.kill("SIGKILL");
+					// `proc.killed` only records that SIGTERM was delivered, so it is already
+					// true when the child ignores the signal. Escalate on a child that is
+					// still running instead, and do not hold the process open for the timer.
+					killTimer = setTimeout(() => {
+						if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
 					}, 5000);
+					killTimer.unref?.();
 				};
 				if (signal.aborted) killProc();
 				else signal.addEventListener("abort", killProc, { once: true });
+				proc.on("close", () => clearTimeout(killTimer));
 			}
 		});
 
