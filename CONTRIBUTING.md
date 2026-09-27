@@ -86,12 +86,13 @@ test/                          offline suites and their harness
 CI runs the suite on Ubuntu and Windows with Node 22 and 24 against a pinned Pi version, plus an
 advisory job against the newest Pi.
 
-## Publishing to npm (optional)
+## Distribution
 
-`package.json` is already set up for it (`files`, `prepublishOnly` runs the tests). Publishing
-needs interactive credentials an agent cannot supply:
+Releases are **GitHub-only**: a tag on `main` plus a GitHub Release. The package is
+deliberately not published to npm, so users install it straight from the repository:
 
 ```bash
-npm login
-npm publish
+pi install git:github.com/LvGitHub-9/pi-subagent@v0.1.0
 ```
+
+Please do not add npm publishing steps back in.

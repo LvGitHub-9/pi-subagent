@@ -48,7 +48,6 @@
     "typebox": "*"
   },
   "scripts": {
-    "test": "node test/run.cjs",
-    "prepublishOnly": "npm test"
+    "test": "node test/run.cjs"
   }
 }
