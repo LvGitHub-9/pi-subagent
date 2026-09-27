@@ -468,7 +468,12 @@ const SubagentParams = Type.Object({
 	tasks: Type.Optional(Type.Array(TaskItem, { description: "Array of {agent, task} for parallel execution" })),
 	chain: Type.Optional(Type.Array(ChainItem, { description: "Array of {agent, task} for sequential execution" })),
 	agentScope: Type.Optional(AgentScopeSchema),
-	cwd: Type.Optional(Type.String({ description: "Working directory for the agent process (single mode)" })),
+	cwd: Type.Optional(
+		Type.String({
+			description:
+				"Project directory for agent discovery and for the agent process (single mode). Defaults to the session working directory.",
+		}),
+	),
 });
 
 export default function (pi: ExtensionAPI) {
@@ -507,7 +512,10 @@ export default function (pi: ExtensionAPI) {
 				model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
 				thinkingLevel: ctx.thinkingLevel,
 			};
-			const discovery = discoverAgents(ctx.cwd, agentScope);
+			// `cwd` selects the project for this call, so agent discovery follows it instead
+			// of the session directory: a session started at the parent directory must be able to delegate
+			// into a subproject and use that subproject's .pi/agents.
+			const discovery = discoverAgents(params.cwd ?? ctx.cwd, agentScope);
 			const agents = discovery.agents;
 			// The trust gate belongs to the user, not the model: a tool parameter would
 			// let the model switch off the very prompt that constrains it. Read it from

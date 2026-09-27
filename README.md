@@ -76,7 +76,7 @@ model: deepseek/deepseek-flash   # 省略则继承父会话
 |---|---|---|
 | builtin | `<本包>/agents/*.md` | 始终 |
 | user | `~/.pi/agent/agents/*.md` | `agentScope: "user"`（默认）或 `"both"` |
-| project | `<cwd>` 或其**任意祖先目录**的 `.pi/agents/*.md` | 仅 `agentScope: "project"` 或 `"both"` |
+| project | `<cwd>` 或其**任意祖先目录**的 `.pi/agents/*.md`；调用时传 `cwd` 可指定目标项目 | 仅 `agentScope: "project"` 或 `"both"` |
 
 `PI_SUBAGENT_AGENTS_DIR` 可覆盖 builtin 目录（测试或特殊布局用）。
 
@@ -124,6 +124,16 @@ npm test        # 4 个套件，全部离线：零模型调用、零终端、不
 
 `test/_harness.cjs` 负责定位 Pi 安装位置并用 jiti 加载真实扩展。alias 指向包的 **dist 目录**而非入口文件——指向文件会被 jiti 做前缀替换，从而破坏 `@earendil-works/pi-ai/compat` 这类子路径导入。
 
+### 手工验收确认框（需要真实 TUI）
+
+测试套件用的是伪造的 `ctx`，真弹窗只能人看。仓库自带 `.pi/agents/demo.md` 作为固定夹具：
+
+1. 在 `./pi-subagent` 目录开一个新会话（或在任意位置传 `cwd` 指向它）；
+2. 让它用 `agentScope: "both"` + `agent: "demo"` 调用 subagent；
+3. 应当弹确认框；选「否」应返回 `Canceled: project-local agents not approved.`。
+
+注意：项目 agent 目录是从**会话 cwd 向上**查找的，所以会话开在父目录时得靠 `cwd` 参数指定目标项目，否则会报 `Unknown agent`。
+
 ## 与官方示例的差异
 
 1. **内置 agents 目录**：官方示例只找 user / project 两个目录，agent 定义必须手工拷到 `~/.pi/agent/agents`。这里增加了 `builtin` 层，包自带 4 个 agent，开箱即用，同时仍可被 user / project 覆盖。
@@ -136,6 +146,7 @@ npm test        # 4 个套件，全部离线：零模型调用、零终端、不
 8. **信任门控重做**：官方示例的门控条件有两个漏洞——(a) 它用 `!ctx.isProjectTrusted()`，但 `.pi/agents/` 不属于 pi 的受保护资源，只含 agent 的项目会被判为已信任，所以这道门在真实场景里几乎不会触发；(b) `confirmProjectAgents` 是工具参数，实测模型会主动把它设成 `false` 从而静默绕过确认框。这里改为「请求项目级 agent 即确认、无 UI 即拒绝、豁免开关只放在用户环境变量里」。
 9. **`/subagent-agents` 尊重项目信任**：官方没有这个命令；新增时默认只在信任的项目里列举项目级 agent。
 10. **离线测试套件**：官方示例只有手工验证。这里用「假 pi 子进程 + 无终端渲染」做到零模型调用、零终端的完整覆盖。
+11. **`cwd` 参与 agent 发现**：官方示例只用会话 cwd 找 `.pi/agents`，所以在父目录开会话、委派到子项目时会找不到该子项目的 agent（实测模型只能把 agent 文件复制到父目录来绕过，把仓库搞脏）。这里让 `cwd` 同时决定发现目录与子进程工作目录。
 
 ## 错误处理与取舍
 

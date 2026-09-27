@@ -141,10 +141,19 @@ async function main() {
 		check("single/pinned agent loads from user dir", !threw, threw);
 	}
 
-	// cwd override.
+	// cwd override: the project is selected for discovery as well as for the child.
+	{
+		const { reports, confirmCalls } = await run(
+			{ agent: "proj-agent", task: "x", agentScope: "both", cwd: PROJECT_DIR },
+			{ ctxOptions: { cwd: WORK_DIR, trusted: true } },
+		);
+		check("cwd/the target project's agents are discovered", reports[0]?.systemPrompt?.includes("Project prompt") === true, reports[0]?.systemPrompt);
+		check("cwd/discovery from another cwd still prompts", confirmCalls.length === 1, confirmCalls.length);
+		check("cwd/the child runs in the requested directory", reports[0]?.cwd === PROJECT_DIR, reports[0]?.cwd);
+	}
 	{
 		const { reports } = await run({ agent: "scout", task: "x", cwd: PROJECT_DIR });
-		check("single/cwd parameter is honoured", reports[0]?.cwd === PROJECT_DIR, reports[0]?.cwd);
+		check("cwd/child cwd parameter is honoured", reports[0]?.cwd === PROJECT_DIR, reports[0]?.cwd);
 	}
 
 	// Streaming updates.
