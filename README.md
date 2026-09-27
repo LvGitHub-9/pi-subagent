@@ -84,10 +84,10 @@ model: deepseek/deepseek-flash   # 省略则继承父会话
 
 每个子代理都是一个独立的 `pi` 子进程，带独立的系统提示词与工具/模型配置。
 
-- **项目级 agent（`.pi/agents/`）由仓库控制**，可以指示模型读文件、跑命令。默认不加载。
-- 要启用必须显式传 `agentScope: "both"`（或 `"project"`），且仅在信任的仓库里用。
-- 在未信任的项目里，交互模式会在运行项目级 agent 前再弹一次确认框（`confirmProjectAgents: false` 可关闭）。
-- **未信任 + 无 UI**（`pi -p` / `--mode json`）时直接**拒绝**运行项目级 agent，而不是默默放行——没人能同意就不跑。报错会提示改用 `agentScope: "user"`、给该次运行加 `--approve` 信任仓库，或换交互模式。
+- **项目级 agent（`.pi/agents/`）由仓库控制**，默认不加载；要启用必须显式传 `agentScope: "both"`（或 `"project"`）。
+- 只要**实际请求**了项目级 agent，交互模式就一律先弹确认框。**pi 自身的项目信任在这里不起作用**：`.pi/agents/` 不属于 pi 的受保护资源（settings/extensions/skills/themes 才是），所以只含 `.pi/agents` 的项目会被 pi 判为「已信任」，`ctx.isProjectTrusted()` 恒为真——依赖它会让这道门形同虚设。因此改为「请求即确认」。
+- **无 UI 时一律拒绝**（`pi -p` / `--mode json` 这类无头场景），而不是默默放行：没人能同意就不跑。报错会提示换交互模式或改用 `agentScope: "user"`。
+- 用户可以一次性豁免这道门：`PI_SUBAGENT_CONFIRM_PROJECT_AGENTS=0`，必须是 **Pi 启动时的进程环境**。这个开关**只属于用户**——它不在工具参数里，所以模型无法自己关掉。
 - `/subagent-agents` 只在项目被信任时才列举项目级 agent。
 
 ## 工作流 prompt 模板
@@ -133,7 +133,7 @@ npm test        # 4 个套件，全部离线：零模型调用、零终端、不
 5. **测试**：新增 `test/discovery.test.cjs` 回归测试。
 6. **无效参数改为抛错**：官方示例的这个分支只返回一段普通文本（没带 `isError`），而模型会把「参数写错了」当成一次成功调用。这里改成 `throw`。
 7. **修中止升级**：官方示例用 `if (!proc.killed)` 判断是否补发 SIGKILL，但 `proc.killed` 在 SIGTERM 发出后即为 `true`，所以 SIGKILL 永远不会发出。改为按 `exitCode` / `signalCode` 判断子进程是否真的还在跑，并 `unref()` 定时器、在 close 时清理。
-8. **补无 UI 时的拒绝**：官方示例在 `ctx.hasUI` 为 false 时直接跳过确认框、照常运行仓库控制的 agent 提示词。这里改为拒绝。
+8. **信任门控重做**：官方示例的门控条件有两个漏洞——(a) 它用 `!ctx.isProjectTrusted()`，但 `.pi/agents/` 不属于 pi 的受保护资源，只含 agent 的项目会被判为已信任，所以这道门在真实场景里几乎不会触发；(b) `confirmProjectAgents` 是工具参数，实测模型会主动把它设成 `false` 从而静默绕过确认框。这里改为「请求项目级 agent 即确认、无 UI 即拒绝、豁免开关只放在用户环境变量里」。
 9. **`/subagent-agents` 尊重项目信任**：官方没有这个命令；新增时默认只在信任的项目里列举项目级 agent。
 10. **离线测试套件**：官方示例只有手工验证。这里用「假 pi 子进程 + 无终端渲染」做到零模型调用、零终端的完整覆盖。
 
@@ -147,6 +147,7 @@ Pi 只在 `execute()` **抛错**时才把工具结果标记为失败：返回对
   - 串联：`Chain stopped at step N (<agent>): <输出>`
   - 并行：`Parallel: N/M succeeded`，每个失败任务带 `### [<agent>] failed`
   - 超过 8 个并行任务：`Too many parallel tasks (...)`
+  - 项目级 agent 未获批准：`Canceled: project-local agents not approved.`，无 UI 时 `Refused to run project-local agents: no UI is available to confirm them.`
 - **中止**：Ctrl+C 后先 SIGTERM，5 秒内未退出再 SIGKILL，然后抛 `Subagent was aborted`。注意 Windows 上 `process.kill` 的 SIGTERM 会直接终止进程（不可捕获），升级分支实际只在 POSIX 生效；POSIX 下有测试覆盖，Windows 下只验证「不挂起、确实已终止」。
 
 ## 已知限制

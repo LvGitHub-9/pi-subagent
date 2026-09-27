@@ -100,6 +100,16 @@ assert.equal(find("both", "bad-tools").tools, undefined, "a non-string/non-array
 assert.deepEqual(find("both", "local-only").tools, ["read", "grep"], "comma-separated tools are split");
 assert.deepEqual(find("both", "repo-only").tools, undefined, "missing tools means all tools");
 
+// A YAML syntax error used to abort discovery for the whole directory: the
+// parser throw was not caught. A real agent file with a colon inside an
+// unquoted description did exactly this and made every agent disappear.
+writeAgent(path.join(PROJECT_DIR, ".pi", "agents"), "broken-yaml.md", "name: broken-yaml\ntools: [read, grep");
+writeAgent(path.join(PROJECT_DIR, ".pi", "agents"), "colon-value.md", "name: colon-value\ndescription: a (scope: both) b");
+assert.equal(find("both", "broken-yaml"), undefined, "unparsable YAML is skipped");
+assert.equal(find("both", "colon-value"), undefined, "a colon in a value is skipped, not fatal");
+assert.equal(find("both", "scout").source, "user", "valid agents still resolve after a broken file");
+assert.equal(find("both", "planner").source, "builtin");
+
 // ---------------------------------------------------------------------------
 // override env var
 // ---------------------------------------------------------------------------

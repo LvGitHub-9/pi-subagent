@@ -82,7 +82,7 @@ function readReports() {
 async function run(params, { ctxOptions = {}, env = {}, signal, onUpdate, resetReport = true } = {}) {
 	if (resetReport) fs.rmSync(REPORT, { force: true });
 	const saved = {};
-	for (const [key, value] of Object.entries({ STUB_REPORT: REPORT, ...env })) {
+	for (const [key, value] of Object.entries({ STUB_REPORT: REPORT, PI_SUBAGENT_CONFIRM_PROJECT_AGENTS: undefined, ...env })) {
 		saved[key] = process.env[key];
 		if (value === undefined) delete process.env[key];
 		else process.env[key] = String(value);
@@ -94,7 +94,7 @@ async function run(params, { ctxOptions = {}, env = {}, signal, onUpdate, resetR
 	} catch (error) {
 		return { result: undefined, reports: readReports(), confirmCalls, threw: error.message };
 	} finally {
-		for (const key of Object.keys({ STUB_REPORT: 1, ...env })) {
+		for (const key of Object.keys({ STUB_REPORT: 1, PI_SUBAGENT_CONFIRM_PROJECT_AGENTS: 1, ...env })) {
 			if (saved[key] === undefined) delete process.env[key];
 			else process.env[key] = saved[key];
 		}
@@ -320,16 +320,33 @@ async function main() {
 			{ agent: "proj-agent", task: "x", agentScope: "both" },
 			{ ctxOptions: { cwd: PROJECT_DIR, trusted: true } },
 		);
-		check("gate/trusted project skips the prompt", confirmCalls.length === 0, confirmCalls.length);
-		check("gate/trusted project runs", reports.length === 1, reports.length);
+		// A project holding only .pi/agents is reported as trusted by Pi, so trusting
+		// the project must not be enough to skip the prompt.
+		check("gate/a trusted project is still asked", confirmCalls.length === 1, confirmCalls.length);
+		check("gate/a trusted project runs after approval", reports.length === 1, reports.length);
 	}
 	{
-		const { reports, confirmCalls } = await run(
+		// The gate belongs to the user: a tool parameter must not switch it off,
+		// even though an older version accepted one.
+		const viaParam = await run(
 			{ agent: "proj-agent", task: "x", agentScope: "both", confirmProjectAgents: false },
 			{ ctxOptions: { cwd: PROJECT_DIR, trusted: false } },
 		);
-		check("gate/confirmProjectAgents:false skips the prompt", confirmCalls.length === 0, confirmCalls.length);
-		check("gate/confirmProjectAgents:false still runs", reports.length === 1, reports.length);
+		check("gate/a tool parameter cannot skip the prompt", viaParam.confirmCalls.length === 1, viaParam.confirmCalls.length);
+		check("gate/a tool parameter still runs after approval", viaParam.reports.length === 1, viaParam.reports.length);
+
+		const viaEnv = await run(
+			{ agent: "proj-agent", task: "x", agentScope: "both" },
+			{ ctxOptions: { cwd: PROJECT_DIR, trusted: false }, env: { PI_SUBAGENT_CONFIRM_PROJECT_AGENTS: "0" } },
+		);
+		check("gate/a user-environment waiver skips the prompt", viaEnv.confirmCalls.length === 0, viaEnv.confirmCalls.length);
+		check("gate/a user-environment waiver still runs", viaEnv.reports.length === 1, viaEnv.reports.length);
+
+		const envNoUi = await run(
+			{ agent: "proj-agent", task: "x", agentScope: "both" },
+			{ ctxOptions: { cwd: PROJECT_DIR, trusted: false, hasUI: false }, env: { PI_SUBAGENT_CONFIRM_PROJECT_AGENTS: "0" } },
+		);
+		check("gate/a user-environment waiver works without a UI", envNoUi.reports.length === 1, envNoUi.reports.length);
 	}
 	{
 		const { result, reports } = await run({ agent: "proj-agent", task: "x" }, { ctxOptions: { cwd: PROJECT_DIR } });
@@ -339,11 +356,12 @@ async function main() {
 	{
 		const { result, reports, confirmCalls } = await run(
 			{ agent: "proj-agent", task: "x", agentScope: "both" },
-			{ ctxOptions: { cwd: PROJECT_DIR, trusted: false, confirmAnswer: false, hasUI: false } },
+			{ ctxOptions: { cwd: PROJECT_DIR, trusted: true, confirmAnswer: false, hasUI: false } },
 		);
 		check("gate/no UI refuses project agents", reports.length === 0, reports.length);
 		check("gate/no UI explains the refusal", textOf(result).includes("Refused to run project-local agents"), textOf(result));
-		check("gate/no UI points at --approve", textOf(result).includes("--approve"), textOf(result));
+		check("gate/no UI points at the waiver", textOf(result).includes("PI_SUBAGENT_CONFIRM_PROJECT_AGENTS"), textOf(result));
+		check("gate/no UI does not suggest --approve", !textOf(result).includes("--approve"), textOf(result));
 		check("gate/no UI does not ask", confirmCalls.length === 0, confirmCalls.length);
 	}
 

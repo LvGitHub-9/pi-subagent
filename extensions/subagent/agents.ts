@@ -97,7 +97,15 @@ function loadAgentsFromDir(dir: string, source: AgentSource): AgentConfig[] {
 			continue;
 		}
 
-		const { frontmatter, body } = parseFrontmatter<AgentFrontmatter>(content);
+		const { frontmatter, body } = (() => {
+			try {
+				return parseFrontmatter<AgentFrontmatter>(content);
+			} catch {
+				// A YAML error in one file must not take down discovery for every other
+				// agent: skip the file instead.
+				return { frontmatter: {} as AgentFrontmatter, body: "" };
+			}
+		})();
 
 		if (typeof frontmatter.name !== "string" || typeof frontmatter.description !== "string") {
 			continue;

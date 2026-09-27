@@ -468,9 +468,6 @@ const SubagentParams = Type.Object({
 	tasks: Type.Optional(Type.Array(TaskItem, { description: "Array of {agent, task} for parallel execution" })),
 	chain: Type.Optional(Type.Array(ChainItem, { description: "Array of {agent, task} for sequential execution" })),
 	agentScope: Type.Optional(AgentScopeSchema),
-	confirmProjectAgents: Type.Optional(
-		Type.Boolean({ description: "Prompt before running project-local agents. Default: true.", default: true }),
-	),
 	cwd: Type.Optional(Type.String({ description: "Working directory for the agent process (single mode)" })),
 });
 
@@ -512,7 +509,10 @@ export default function (pi: ExtensionAPI) {
 			};
 			const discovery = discoverAgents(ctx.cwd, agentScope);
 			const agents = discovery.agents;
-			const confirmProjectAgents = params.confirmProjectAgents ?? true;
+			// The trust gate belongs to the user, not the model: a tool parameter would
+			// let the model switch off the very prompt that constrains it. Read it from
+			// the process environment instead, which the model cannot change.
+			const confirmProjectAgents = process.env.PI_SUBAGENT_CONFIRM_PROJECT_AGENTS !== "0";
 
 			const hasChain = (params.chain?.length ?? 0) > 0;
 			const hasTasks = (params.tasks?.length ?? 0) > 0;
@@ -554,10 +554,16 @@ export default function (pi: ExtensionAPI) {
 					.map((name) => agents.find((a) => a.name === name))
 					.filter((a): a is AgentConfig => a?.source === "project");
 
-				if (projectAgentsRequested.length > 0 && !ctx.isProjectTrusted()) {
+				// Pi's trust decision does not cover this: agent files are not a trust-protected
+				// resource, so a project holding only .pi/agents counts as trusted and
+				// isProjectTrusted() never gates anything. Prompt whenever repository-controlled
+				// agents are actually requested instead.
+				if (projectAgentsRequested.length > 0) {
 					const refusalDetails = () => makeDetails(hasChain ? "chain" : hasTasks ? "parallel" : "single")([]);
 
-					if (!ctx.hasUI) {
+					if (!confirmProjectAgents) {
+						// The user waived the prompt in their environment; proceed silently.
+					} else if (!ctx.hasUI) {
 						// Nothing can ask the user in json/print mode, and project agents are
 						// repo-controlled prompts. Refuse instead of running them silently.
 						return {
@@ -567,15 +573,14 @@ export default function (pi: ExtensionAPI) {
 									text: [
 										"Refused to run project-local agents: no UI is available to confirm them.",
 										`Agents: ${projectAgentsRequested.map((a) => a.name).join(", ")}`,
-										'Use agentScope "user", or trust the repository for this run (--approve), or run interactively.',
+										'Run interactively to approve, or use agentScope "user".',
+										"To waive this prompt for every run, set PI_SUBAGENT_CONFIRM_PROJECT_AGENTS=0 in the environment Pi starts from.",
 									].join("\n"),
 								},
 							],
 							details: refusalDetails(),
 						};
-					}
-
-					if (confirmProjectAgents) {
+					} else {
 						const names = projectAgentsRequested.map((a) => a.name).join(", ");
 						const dir = discovery.projectAgentsDir ?? "(unknown)";
 						const ok = await ctx.ui.confirm(

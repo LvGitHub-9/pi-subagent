@@ -53,7 +53,7 @@ assert.ok(!tool.promptSnippet.startsWith("subagent:"), tool.promptSnippet);
 assert.ok(Array.isArray(tool.promptGuidelines) && tool.promptGuidelines.length >= 2);
 
 const props = tool.parameters.properties;
-for (const key of ["agent", "task", "tasks", "chain", "agentScope", "confirmProjectAgents", "cwd"]) {
+for (const key of ["agent", "task", "tasks", "chain", "agentScope", "cwd"]) {
 	assert.ok(props[key], `parameter ${key} is exposed`);
 }
 assert.equal(props.agent.type, "string");
@@ -64,8 +64,9 @@ assert.deepEqual(props.tasks.items.required, ["agent", "task"]);
 assert.deepEqual(props.chain.items.required, ["agent", "task"]);
 assert.deepEqual(props.agentScope.enum, ["user", "project", "both"]);
 assert.equal(props.agentScope.default, "user");
-assert.equal(props.confirmProjectAgents.type, "boolean");
-assert.equal(props.confirmProjectAgents.default, true);
+// The trust gate must not be reachable from the model: a parameter would let it
+// switch off the prompt that constrains it (it did, in a real session).
+assert.equal(props.confirmProjectAgents, undefined, "the model cannot switch off the trust prompt");
 // Everything is optional: mode selection happens in execute(), not in the schema.
 assert.equal(tool.parameters.required, undefined, "no parameter is required");
 
