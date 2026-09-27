@@ -34,6 +34,6 @@
     "typebox": "*"
   },
   "scripts": {
-    "test": "node test/discovery.test.cjs"
+    "test": "node test/run.cjs"
   }
 }

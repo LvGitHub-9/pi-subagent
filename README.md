@@ -87,6 +87,8 @@ model: deepseek/deepseek-flash   # 省略则继承父会话
 - **项目级 agent（`.pi/agents/`）由仓库控制**，可以指示模型读文件、跑命令。默认不加载。
 - 要启用必须显式传 `agentScope: "both"`（或 `"project"`），且仅在信任的仓库里用。
 - 在未信任的项目里，交互模式会在运行项目级 agent 前再弹一次确认框（`confirmProjectAgents: false` 可关闭）。
+- **未信任 + 无 UI**（`pi -p` / `--mode json`）时直接**拒绝**运行项目级 agent，而不是默默放行——没人能同意就不跑。报错会提示改用 `agentScope: "user"`、给该次运行加 `--approve` 信任仓库，或换交互模式。
+- `/subagent-agents` 只在项目被信任时才列举项目级 agent。
 
 ## 工作流 prompt 模板
 
@@ -102,13 +104,25 @@ model: deepseek/deepseek-flash   # 省略则继承父会话
 - `Ctrl+O` 展开：完整任务、全部工具调用、Markdown 渲染的最终输出、每步骤用量。
 - 并行模式实时显示 `2/3 done, 1 running`；Ctrl+C 会传递到子进程。
 
-## 开发
+## 测试
 
 ```bash
-node test/discovery.test.cjs   # 或 npm test
+npm test        # 4 个套件，全部离线：零模型调用、零终端、不碰真实的 ~/.pi/agent
 ```
 
-测试用 Pi 自带的 jiti 直接加载 `extensions/subagent/agents.ts`，在临时目录里校验三层优先级与覆盖规则，不触碰真实的 `~/.pi/agent`。
+| 套件 | 覆盖 |
+|---|---|
+| `test/discovery.test.cjs` | 三层优先级、scope 隔离、`PI_SUBAGENT_AGENTS_DIR` 覆盖、坏 agent 文件容错 |
+| `test/render.test.cjs` | `renderCall` / `renderResult`：三种模式 × 折叠/展开 × 成功/失败/运行中，76 项断言，含窄宽度与可视宽度不溢出 |
+| `test/tool.test.cjs` | 整条执行链路 86 项：spawn、JSONL 解析、用量汇总、`{previous}` 替换、50 KB 截断、信任门控、中止、临时文件清理 |
+| `test/extension.test.cjs` | 注册面：工具与参数 schema、prompt 集成、`/subagent-agents` 的信任行为、不在工厂里订阅事件 |
+
+两个关键点让离线测试成为可能：
+
+1. **渲染无需终端**：`renderCall` / `renderResult` 返回的是 pi-tui 组件，唯一要求是 `render(width): string[]`。
+2. **无需模型调用**：子代理是按 `node <process.argv[1]>` 启动的，测试把 `process.argv[1]` 指向 `test/fake-pi.cjs`；它按 `--mode json` 格式回放消息，并把收到的每个参数写进报告文件供断言。
+
+`test/_harness.cjs` 负责定位 Pi 安装位置并用 jiti 加载真实扩展。alias 指向包的 **dist 目录**而非入口文件——指向文件会被 jiti 做前缀替换，从而破坏 `@earendil-works/pi-ai/compat` 这类子路径导入。
 
 ## 与官方示例的差异
 
@@ -119,6 +133,9 @@ node test/discovery.test.cjs   # 或 npm test
 5. **测试**：新增 `test/discovery.test.cjs` 回归测试。
 6. **无效参数改为抛错**：官方示例的这个分支只返回一段普通文本（没带 `isError`），而模型会把「参数写错了」当成一次成功调用。这里改成 `throw`。
 7. **修中止升级**：官方示例用 `if (!proc.killed)` 判断是否补发 SIGKILL，但 `proc.killed` 在 SIGTERM 发出后即为 `true`，所以 SIGKILL 永远不会发出。改为按 `exitCode` / `signalCode` 判断子进程是否真的还在跑，并 `unref()` 定时器、在 close 时清理。
+8. **补无 UI 时的拒绝**：官方示例在 `ctx.hasUI` 为 false 时直接跳过确认框、照常运行仓库控制的 agent 提示词。这里改为拒绝。
+9. **`/subagent-agents` 尊重项目信任**：官方没有这个命令；新增时默认只在信任的项目里列举项目级 agent。
+10. **离线测试套件**：官方示例只有手工验证。这里用「假 pi 子进程 + 无终端渲染」做到零模型调用、零终端的完整覆盖。
 
 ## 错误处理与取舍
 
@@ -130,7 +147,7 @@ Pi 只在 `execute()` **抛错**时才把工具结果标记为失败：返回对
   - 串联：`Chain stopped at step N (<agent>): <输出>`
   - 并行：`Parallel: N/M succeeded`，每个失败任务带 `### [<agent>] failed`
   - 超过 8 个并行任务：`Too many parallel tasks (...)`
-- **中止**：Ctrl+C 后先 SIGTERM，5 秒内未退出再 SIGKILL，然后抛 `Subagent was aborted`。（SIGKILL 升级分支没有自动化测试覆盖：Windows 上无法可靠地向另一个进程注入 Ctrl+C。）
+- **中止**：Ctrl+C 后先 SIGTERM，5 秒内未退出再 SIGKILL，然后抛 `Subagent was aborted`。注意 Windows 上 `process.kill` 的 SIGTERM 会直接终止进程（不可捕获），升级分支实际只在 POSIX 生效；POSIX 下有测试覆盖，Windows 下只验证「不挂起、确实已终止」。
 
 ## 已知限制
 

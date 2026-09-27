@@ -478,7 +478,10 @@ export default function (pi: ExtensionAPI) {
 	pi.registerCommand("subagent-agents", {
 		description: "List subagents available to the subagent tool",
 		handler: async (_args, ctx) => {
-			const discovery = discoverAgents(ctx.cwd, "both");
+			// Descriptions of project agents are repository-controlled content, so only
+			// enumerate them for a project the user trusts.
+			const scope: AgentScope = ctx.isProjectTrusted() ? "both" : "user";
+			const discovery = discoverAgents(ctx.cwd, scope);
 			ctx.ui.notify(formatAgentCatalog(discovery.agents), "info");
 		},
 	});
@@ -541,12 +544,7 @@ export default function (pi: ExtensionAPI) {
 				);
 			}
 
-			if (
-				(agentScope === "project" || agentScope === "both") &&
-				confirmProjectAgents &&
-				ctx.hasUI &&
-				!ctx.isProjectTrusted()
-			) {
+			if (agentScope === "project" || agentScope === "both") {
 				const requestedAgentNames = new Set<string>();
 				if (params.chain) for (const step of params.chain) requestedAgentNames.add(step.agent);
 				if (params.tasks) for (const t of params.tasks) requestedAgentNames.add(t.agent);
@@ -556,18 +554,41 @@ export default function (pi: ExtensionAPI) {
 					.map((name) => agents.find((a) => a.name === name))
 					.filter((a): a is AgentConfig => a?.source === "project");
 
-				if (projectAgentsRequested.length > 0) {
-					const names = projectAgentsRequested.map((a) => a.name).join(", ");
-					const dir = discovery.projectAgentsDir ?? "(unknown)";
-					const ok = await ctx.ui.confirm(
-						"Run project-local agents?",
-						`Agents: ${names}\nSource: ${dir}\n\nProject agents are repo-controlled. Only continue for trusted repositories.`,
-					);
-					if (!ok)
+				if (projectAgentsRequested.length > 0 && !ctx.isProjectTrusted()) {
+					const refusalDetails = () => makeDetails(hasChain ? "chain" : hasTasks ? "parallel" : "single")([]);
+
+					if (!ctx.hasUI) {
+						// Nothing can ask the user in json/print mode, and project agents are
+						// repo-controlled prompts. Refuse instead of running them silently.
 						return {
-							content: [{ type: "text", text: "Canceled: project-local agents not approved." }],
-							details: makeDetails(hasChain ? "chain" : hasTasks ? "parallel" : "single")([]),
+							content: [
+								{
+									type: "text",
+									text: [
+										"Refused to run project-local agents: no UI is available to confirm them.",
+										`Agents: ${projectAgentsRequested.map((a) => a.name).join(", ")}`,
+										'Use agentScope "user", or trust the repository for this run (--approve), or run interactively.',
+									].join("\n"),
+								},
+							],
+							details: refusalDetails(),
 						};
+					}
+
+					if (confirmProjectAgents) {
+						const names = projectAgentsRequested.map((a) => a.name).join(", ");
+						const dir = discovery.projectAgentsDir ?? "(unknown)";
+						const ok = await ctx.ui.confirm(
+							"Run project-local agents?",
+							`Agents: ${names}\nSource: ${dir}\n\nProject agents are repo-controlled. Only continue for trusted repositories.`,
+						);
+						if (!ok) {
+							return {
+								content: [{ type: "text", text: "Canceled: project-local agents not approved." }],
+								details: refusalDetails(),
+							};
+						}
+					}
 				}
 			}
 
