@@ -1,0 +1,39 @@
+{
+  "name": "pi-subagent",
+  "version": "0.1.0",
+  "description": "Delegate tasks to isolated subagents from inside Pi: single, parallel and chained agent workflows.",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "subagent",
+    "delegate",
+    "agent"
+  ],
+  "license": "MIT",
+  "author": "Lv",
+  "files": [
+    "extensions",
+    "agents",
+    "prompts",
+    "README.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/subagent/index.ts"
+    ],
+    "prompts": [
+      "./prompts/*.md"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "scripts": {
+    "test": "node test/discovery.test.cjs"
+  }
+}
