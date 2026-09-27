@@ -66,11 +66,18 @@ git push origin "$TAG"
 
 NOTES="$(mktemp)"
 trap 'rm -f "$NOTES"' EXIT
-awk -v v="$VERSION" '
-	$0 ~ "^## \\[" v "\\]" { capture = 1; next }
-	capture && /^## \[/ { exit }
+# Plain string matching on purpose: a regex here needs to escape the literal '[',
+# and the escaping is easy to get wrong when the script is written through a shell.
+awk -v want="## [$VERSION]" '
+	index($0, want) == 1 { capture = 1; next }
+	capture && index($0, "## ") == 1 { exit }
 	capture { print }
 ' CHANGELOG.md > "$NOTES"
+
+if [[ ! -s "$NOTES" ]]; then
+	echo "could not extract the $VERSION section from CHANGELOG.md" >&2
+	exit 1
+fi
 
 echo "==> creating the GitHub Release"
 "$GH" release create "$TAG" --title "$TAG" --notes-file "$NOTES"
