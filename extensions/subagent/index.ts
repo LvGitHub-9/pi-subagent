@@ -528,15 +528,11 @@ export default function (pi: ExtensionAPI) {
 
 			if (modeCount !== 1) {
 				const available = agents.map((a) => `${a.name} (${a.source})`).join(", ") || "none";
-				return {
-					content: [
-						{
-							type: "text",
-							text: `Invalid parameters. Provide exactly one mode (agent + task, tasks, or chain).\nAvailable agents: ${available}`,
-						},
-					],
-					details: makeDetails("single")([]),
-				};
+				// Pi only marks a failed tool result when execute() throws; a result
+				// object with isError: true is ignored, so signal the mistake this way.
+				throw new Error(
+					`Provide exactly one mode (agent + task, tasks, or chain). Available agents: ${available}`,
+				);
 			}
 
 			if (

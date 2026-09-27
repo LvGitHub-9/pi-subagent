@@ -23,6 +23,12 @@ const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-agentdir-"))
 const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-project-"));
 process.env.PI_CODING_AGENT_DIR = agentDir;
 
+// Registered before anything can throw, so a failing assertion cannot leak temp dirs.
+process.on("exit", () => {
+	fs.rmSync(agentDir, { recursive: true, force: true });
+	fs.rmSync(projectDir, { recursive: true, force: true });
+});
+
 function writeAgent(dir, file, name, description) {
 	fs.mkdirSync(dir, { recursive: true });
 	fs.writeFileSync(
@@ -80,6 +86,4 @@ const builtinInUserScope = discoverAgents(projectDir, "user")
 	.sort();
 assert.deepEqual(builtinInUserScope, ["planner", "reviewer", "worker"]);
 
-fs.rmSync(agentDir, { recursive: true, force: true });
-fs.rmSync(projectDir, { recursive: true, force: true });
 console.log("discovery test passed (builtin dir:", builtinDir + ")");

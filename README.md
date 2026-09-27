@@ -117,6 +117,13 @@ node test/discovery.test.cjs   # 或 npm test
 3. **发现能力**：新增「无参数即列出 agent 清单」与 `/subagent-agents` 命令。
 4. **系统提示集成**：补上 `promptSnippet` 与 `promptGuidelines`，让工具出现在默认系统提示的可用工具列表里，并给出使用时机建议。
 5. **测试**：新增 `test/discovery.test.cjs` 回归测试。
+6. **无效参数改为抛错**：官方示例返回 `{ content, isError: true }`，但当前 Pi 版本会忽略结果对象上的 `isError`（只有 `execute()` 抛错才会产生失败的工具结果），于是模型会把参数错误当成功。这里改成 `throw`。
+
+## 错误处理与取舍
+
+- **参数错误**：抛错，模型能明确看到失败并自我纠正。
+- **单个子代理失败**（agent 不存在、进程非 0 退出、LLM 报错）：返回以 `Agent failed:` / `Chain stopped at step N` 开头的文本。这些路径**故意不抛错**，因为抛错会丢失 `details`，而失败时用户往往最想看子代理挂掉前做了什么工具调用。代价是模型要自己读懂文本里的失败语义。
+- **中止**：Ctrl+C 会 SIGTERM（5 秒后 SIGKILL）子进程并抛错。
 
 ## 已知限制
 
