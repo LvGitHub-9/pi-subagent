@@ -1,0 +1,8 @@
+# Keep the repository's line endings stable for everyone, regardless of the
+# contributor's platform or core.autocrlf setting.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary

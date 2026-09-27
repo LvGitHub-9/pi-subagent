@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # The suite loads the real extension through the jiti bundled with Pi, so a Pi
+  # installation must be present to resolve the peer packages against. Pin it so
+  # upstream changes cannot turn `main` red unexpectedly; the `latest` job below
+  # reports upstream breakage separately, without blocking.
+  PI_VERSION: 0.87.1
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install Pi
+        run: npm install --global @earendil-works/pi-coding-agent@${{ env.PI_VERSION }}
+
+      - name: Run the offline test suite
+        run: npm test
+
+  latest:
+    name: against Pi @latest (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install the newest Pi
+        run: npm install --global @earendil-works/pi-coding-agent@latest
+
+      - name: Run the offline test suite
+        run: npm test

@@ -4,6 +4,9 @@
 
 [English](README.md) | **中文**
 
+[![CI](https://github.com/LvGitHub-9/pi-subagent/actions/workflows/ci.yml/badge.svg)](https://github.com/LvGitHub-9/pi-subagent/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 基于 Pi 官方 `examples/extensions/subagent` 改造，主要改动见文末「与官方示例的差异」。
 
 ## 安装
@@ -172,4 +175,4 @@ Pi 只在 `execute()` **抛错**时才把工具结果标记为失败：返回对
 
 ## 许可证
 
-MIT，见 [LICENSE](LICENSE)。
+MIT，见 [LICENSE](LICENSE)。变动记录在 [CHANGELOG.md](CHANGELOG.md)；开发与发版流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。

@@ -4,6 +4,9 @@
 
 **English** | [中文](README.zh-CN.md)
 
+[![CI](https://github.com/LvGitHub-9/pi-subagent/actions/workflows/ci.yml/badge.svg)](https://github.com/LvGitHub-9/pi-subagent/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Built on Pi's official `examples/extensions/subagent`; every deliberate change is listed in [Differences from the official example](#differences-from-the-official-example).
 
 ## Install
@@ -172,4 +175,5 @@ Pi only marks a tool result as failed when `execute()` **throws**: an `isError: 
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Changes are recorded in [CHANGELOG.md](CHANGELOG.md); see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the development and release workflow.

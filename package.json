@@ -20,12 +20,16 @@
   "bugs": {
     "url": "https://github.com/LvGitHub-9/pi-subagent/issues"
   },
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "files": [
     "extensions",
     "agents",
     "prompts",
     "README.md",
     "README.zh-CN.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "pi": {
@@ -44,6 +48,7 @@
     "typebox": "*"
   },
   "scripts": {
-    "test": "node test/run.cjs"
+    "test": "node test/run.cjs",
+    "prepublishOnly": "npm test"
   }
 }
